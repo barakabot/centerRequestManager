@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  region    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  salesmen      Salesman[]
+  targets       Target[]
+  adHocRequests AdHocRequest[]
+  users         User[]
+}
+
+model ProductGroup {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  salesLine String   // Food, Beverage, Hygiene, Snacks, Dairy
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  targets          Target[]
+  salesPerformance SalesPerformance[]
+}
+
+model Salesman {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  branchId  String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch           Branch           @relation(fields: [branchId], references: [id])
+  salesmanTargets  SalesmanTarget[]
+  salesPerformance SalesPerformance[]
+}
+
+model Period {
+  id           String   @id @default(cuid())
+  name         String   // e.g. "فروردین ۱۴۰۴"
+  startDate    DateTime
+  endDate      DateTime
+  deadlineDate DateTime // Last date for branch managers to finalize
+  status       String   @default("active") // active, closed, auto_allocated
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  targets Target[]
+}
+
+model Target {
+  id              String    @id @default(cuid())
+  periodId        String
+  productGroupId  String
+  branchId        String
+  totalTarget     Float     // Total target for this product group in this branch
+  allocatedTarget Float     @default(0) // Sum of salesman targets
+  status          String    @default("pending") // pending, partially_allocated, allocated, finalized
+  finalizedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  period         Period         @relation(fields: [periodId], references: [id])
+  productGroup   ProductGroup   @relation(fields: [productGroupId], references: [id])
+  branch         Branch         @relation(fields: [branchId], references: [id])
+  salesmanTargets SalesmanTarget[]
+}
+
+model SalesmanTarget {
+  id              String   @id @default(cuid())
+  targetId        String
+  salesmanId      String
+  suggestedTarget Float    // From planning department
+  assignedTarget  Float    @default(0) // Set by branch manager
+  stretchTarget   Float?   // Motivational/boost target
+  minTarget       Float    // Minimum target
+  avgCartonSales  Float    @default(0) // Average carton sales
+  activeCustomers Int      @default(0) // Active customer count
+  status          String   @default("pending") // pending, confirmed
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  target   Target   @relation(fields: [targetId], references: [id])
+  salesman Salesman @relation(fields: [salesmanId], references: [id])
+}
+
+model SalesPerformance {
+  id             String   @id @default(cuid())
+  salesmanId     String
+  productGroupId String
+  periodId       String
+  actualSales    Float    @default(0)
+  customerCount  Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  salesman     Salesman     @relation(fields: [salesmanId], references: [id])
+  productGroup ProductGroup @relation(fields: [productGroupId], references: [id])
+}
+
+model AdHocRequest {
+  id          String    @id @default(cuid())
+  branchId    String
+  type        String    // correction, additional, transfer, other
+  title       String
+  description String
+  status      String    @default("pending") // pending, in_review, approved, rejected
+  priority    String    @default("normal") // low, normal, high, urgent
+  createdBy   String
+  reviewedBy  String?
+  reviewNote  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id])
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      String   @default("branch_manager") // admin, planning, branch_manager
+  branchId  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch Branch? @relation(fields: [branchId], references: [id])
+}
