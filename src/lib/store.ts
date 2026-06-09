@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type ActiveTab = 'dashboard' | 'product-groups' | 'target-allocation' | 'ad-hoc-requests' | 'excel-import' | 'periods';
+export type ActiveTab = 'dashboard' | 'product-groups' | 'target-allocation' | 'ad-hoc-requests' | 'excel-import' | 'periods' | 'admin';
 
 interface AppState {
   // Navigation

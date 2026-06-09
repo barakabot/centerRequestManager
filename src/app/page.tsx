@@ -11,6 +11,7 @@ import {
   Menu,
   Building2,
   CalendarDays,
+  Shield,
 } from 'lucide-react';
 import { useAppStore, type ActiveTab } from '@/lib/store';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,7 @@ import TargetAllocationSection from '@/components/sections/TargetAllocationSecti
 import AdHocRequestsSection from '@/components/sections/AdHocRequestsSection';
 import ExcelImportSection from '@/components/sections/ExcelImportSection';
 import PeriodsSection from '@/components/sections/PeriodsSection';
+import AdminPanel from '@/components/sections/AdminPanel';
 
 // --- Types ---
 interface Branch {
@@ -67,6 +69,7 @@ const navItems: { id: ActiveTab; label: string; icon: React.ElementType }[] = [
   { id: 'ad-hoc-requests', label: 'درخواست‌های موردی', icon: FileQuestion },
   { id: 'excel-import', label: 'ورود اطلاعات', icon: Upload },
   { id: 'periods', label: 'دوره‌ها', icon: Calendar },
+  { id: 'admin', label: 'پنل ادمین', icon: Shield },
 ];
 
 // --- Tab Content Placeholders ---
@@ -94,6 +97,10 @@ const tabPlaceholders: Record<ActiveTab, { title: string; description: string }>
   periods: {
     title: 'دوره‌ها',
     description: 'مدیریت دوره‌های فروش',
+  },
+  admin: {
+    title: 'پنل ادمین',
+    description: 'مدیریت کاربران، شعب، گروه‌های کالایی و تارگت‌های انبوه',
   },
 };
 
@@ -396,6 +403,9 @@ export default function Home() {
             )}
             {activeTab === 'periods' && (
               <PeriodsSection />
+            )}
+            {activeTab === 'admin' && (
+              <AdminPanel />
             )}
           </main>
 

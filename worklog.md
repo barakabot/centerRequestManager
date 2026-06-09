@@ -25,3 +25,36 @@ Stage Summary:
 - Professional UI with emerald/teal color scheme, shadcn/ui components
 - Responsive design with mobile sidebar (Sheet) and desktop collapsible sidebar
 - Key features: KPI dashboard, product group management, salesman target allocation with validation, ad-hoc request workflow, Excel/CSV import with validation, period management with deadline tracking
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Add Admin Panel to the Target Management System
+
+Work Log:
+- Updated Zustand store ActiveTab type to include 'admin'
+- Created 5 admin API routes:
+  - /api/admin/dashboard — System-wide overview with branch performance comparison
+  - /api/admin/users — Full CRUD (GET, POST, PUT, DELETE) with duplicate email validation
+  - /api/admin/branches — Full CRUD with branch code uniqueness check
+  - /api/admin/product-groups — Full CRUD with code uniqueness check
+  - /api/admin/targets-bulk — Bulk target creation for all branches per period/product group
+- Built AdminPanel component with 6 sub-tabs using shadcn Tabs:
+  - AdminOverview: System KPI cards, target status summary, branch performance table
+  - UsersManagement: Users table with create/edit dialog, role badges, toggle active, delete
+  - BranchesManagement: Branches table with create/edit dialog, toggle active, delete
+  - ProductGroupsManagement: Product groups table with create/edit dialog, toggle active, delete
+  - BulkTargetManagement: Period/product group selectors, branch target input fields, bulk submit
+  - RequestReview: Status filter, request cards with approve/reject buttons
+- Added admin tab to sidebar navigation with Shield icon
+- Updated page.tsx with admin tab integration
+- Lint check passed
+- Agent Browser verification — all 9 checks passed, no errors
+
+Stage Summary:
+- Full admin panel with 6 functional sub-tabs
+- CRUD operations for users, branches, and product groups
+- Bulk target allocation capability across all branches
+- System-wide dashboard with branch performance comparison
+- Request review workflow with approve/reject actions
+- All dialog forms with proper validation and error handling
