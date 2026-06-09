@@ -131,14 +131,16 @@ model AdHocRequest {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  role      String   @default("branch_manager") // admin, planning, branch_manager
-  branchId  String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  password     String   // Hashed password
+  role         String   @default("branch_manager") // admin, planning, branch_manager
+  branchId     String?
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   branch Branch? @relation(fields: [branchId], references: [id])
 }

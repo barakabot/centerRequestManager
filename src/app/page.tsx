@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { signOut } from 'next-auth/react';
 import {
   LayoutDashboard,
   Package,
@@ -12,8 +13,11 @@ import {
   Building2,
   CalendarDays,
   Shield,
+  LogOut,
+  User,
+  ChevronDown,
 } from 'lucide-react';
-import { useAppStore, type ActiveTab } from '@/lib/store';
+import { useAppStore, type ActiveTab, getVisibleTabs, canSelectBranch, type AuthUser } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -35,6 +39,14 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
 import DashboardSection from '@/components/sections/DashboardSection';
 import ProductGroupsSection from '@/components/sections/ProductGroupsSection';
 import TargetAllocationSection from '@/components/sections/TargetAllocationSection';
@@ -42,6 +54,7 @@ import AdHocRequestsSection from '@/components/sections/AdHocRequestsSection';
 import ExcelImportSection from '@/components/sections/ExcelImportSection';
 import PeriodsSection from '@/components/sections/PeriodsSection';
 import AdminPanel from '@/components/sections/AdminPanel';
+import LoginOverlay from '@/components/LoginOverlay';
 
 // --- Types ---
 interface Branch {
@@ -61,48 +74,37 @@ interface Period {
   status: string;
 }
 
-// --- Navigation Items ---
-const navItems: { id: ActiveTab; label: string; icon: React.ElementType }[] = [
-  { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard },
-  { id: 'product-groups', label: 'گروه‌های کالایی', icon: Package },
-  { id: 'target-allocation', label: 'تخصیص تارگت', icon: Target },
-  { id: 'ad-hoc-requests', label: 'درخواست‌های موردی', icon: FileQuestion },
-  { id: 'excel-import', label: 'ورود اطلاعات', icon: Upload },
-  { id: 'periods', label: 'دوره‌ها', icon: Calendar },
-  { id: 'admin', label: 'پنل ادمین', icon: Shield },
+// --- All Navigation Items ---
+const allNavItems: { id: ActiveTab; label: string; icon: React.ElementType; minRole: string[] }[] = [
+  { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, minRole: ['admin', 'planning', 'branch_manager'] },
+  { id: 'product-groups', label: 'گروه‌های کالایی', icon: Package, minRole: ['admin', 'planning'] },
+  { id: 'target-allocation', label: 'تخصیص تارگت', icon: Target, minRole: ['admin', 'planning', 'branch_manager'] },
+  { id: 'ad-hoc-requests', label: 'درخواست‌های موردی', icon: FileQuestion, minRole: ['admin', 'planning', 'branch_manager'] },
+  { id: 'excel-import', label: 'ورود اطلاعات', icon: Upload, minRole: ['admin', 'planning'] },
+  { id: 'periods', label: 'دوره‌ها', icon: Calendar, minRole: ['admin', 'planning', 'branch_manager'] },
+  { id: 'admin', label: 'پنل ادمین', icon: Shield, minRole: ['admin'] },
 ];
 
-// --- Tab Content Placeholders ---
+// --- Tab Content Labels ---
 const tabPlaceholders: Record<ActiveTab, { title: string; description: string }> = {
-  dashboard: {
-    title: 'داشبورد',
-    description: 'نمای کلی وضعیت تارگت‌ها و عملکرد شعب',
-  },
-  'product-groups': {
-    title: 'گروه‌های کالایی',
-    description: 'مدیریت گروه‌های کالایی و خطوط فروش',
-  },
-  'target-allocation': {
-    title: 'تخصیص تارگت',
-    description: 'تخصیص تارگت فروش به بازاریابان',
-  },
-  'ad-hoc-requests': {
-    title: 'درخواست‌های موردی',
-    description: 'مدیریت درخواست‌های اصلاحی و اضافی',
-  },
-  'excel-import': {
-    title: 'ورود اطلاعات',
-    description: 'ورود اطلاعات از فایل اکسل',
-  },
-  periods: {
-    title: 'دوره‌ها',
-    description: 'مدیریت دوره‌های فروش',
-  },
-  admin: {
-    title: 'پنل ادمین',
-    description: 'مدیریت کاربران، شعب، گروه‌های کالایی و تارگت‌های انبوه',
-  },
+  dashboard: { title: 'داشبورد', description: 'نمای کلی وضعیت تارگت‌ها و عملکرد شعب' },
+  'product-groups': { title: 'گروه‌های کالایی', description: 'مدیریت گروه‌های کالایی و خطوط فروش' },
+  'target-allocation': { title: 'تخصیص تارگت', description: 'تخصیص تارگت فروش به بازاریابان' },
+  'ad-hoc-requests': { title: 'درخواست‌های موردی', description: 'مدیریت درخواست‌های اصلاحی و اضافی' },
+  'excel-import': { title: 'ورود اطلاعات', description: 'ورود اطلاعات از فایل اکسل' },
+  periods: { title: 'دوره‌ها', description: 'مدیریت دوره‌های فروش' },
+  admin: { title: 'پنل ادمین', description: 'مدیریت کاربران، شعب، گروه‌های کالایی و تارگت‌های انبوه' },
 };
+
+// --- Role helpers ---
+const getRoleConfig = (role: string): { label: string; className: string } => {
+  switch (role) {
+    case 'admin': return { label: 'مدیر سیستم', className: 'bg-red-100 text-red-800 border-red-300' }
+    case 'planning': return { label: 'برنامه‌ریز فروش', className: 'bg-violet-100 text-violet-800 border-violet-300' }
+    case 'branch_manager': return { label: 'مدیر شعبه', className: 'bg-emerald-100 text-emerald-800 border-emerald-300' }
+    default: return { label: role, className: '' }
+  }
+}
 
 export default function Home() {
   const {
@@ -112,6 +114,12 @@ export default function Home() {
     setSelectedBranchId,
     selectedPeriodId,
     setSelectedPeriodId,
+    user,
+    setUser,
+    isAuthenticated,
+    setIsAuthenticated,
+    isLoadingAuth,
+    setIsLoadingAuth,
   } = useAppStore();
 
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -121,57 +129,139 @@ export default function Home() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // --- Check auth on mount ---
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/session-info')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.authenticated && data.user) {
+            setUser(data.user)
+            setIsAuthenticated(true)
+          } else {
+            setUser(null)
+            setIsAuthenticated(false)
+          }
+        } else {
+          setUser(null)
+          setIsAuthenticated(false)
+        }
+      } catch {
+        setUser(null)
+        setIsAuthenticated(false)
+      } finally {
+        setIsLoadingAuth(false)
+      }
+    }
+    checkAuth()
+  }, [setUser, setIsAuthenticated, setIsLoadingAuth])
+
+  // --- Auto-select branch for branch_manager ---
+  useEffect(() => {
+    if (user && user.role === 'branch_manager' && user.branchId) {
+      setSelectedBranchId(user.branchId)
+    }
+  }, [user, setSelectedBranchId])
+
   // Fetch branches
   useEffect(() => {
+    if (!isAuthenticated) return
     async function fetchBranches() {
       try {
-        const res = await fetch('/api/branches?isActive=true');
+        const res = await fetch('/api/branches?isActive=true')
         if (res.ok) {
-          const data = await res.json();
-          setBranches(data);
+          const data = await res.json()
+          setBranches(data)
           if (data.length > 0 && !selectedBranchId) {
-            setSelectedBranchId(data[0].id);
+            // For admin/planning, select first branch. For branch_manager, it's auto-set above.
+            setSelectedBranchId(data[0].id)
           }
         }
       } catch {
-        console.error('Failed to fetch branches');
+        console.error('Failed to fetch branches')
       } finally {
-        setLoadingBranches(false);
+        setLoadingBranches(false)
       }
     }
-    fetchBranches();
-  }, [selectedBranchId, setSelectedBranchId]);
+    fetchBranches()
+  }, [isAuthenticated, selectedBranchId, setSelectedBranchId])
 
   // Fetch periods
   useEffect(() => {
+    if (!isAuthenticated) return
     async function fetchPeriods() {
       try {
-        const res = await fetch('/api/periods?status=active');
+        const res = await fetch('/api/periods?status=active')
         if (res.ok) {
-          const data = await res.json();
-          setPeriods(data);
+          const data = await res.json()
+          setPeriods(data)
           if (data.length > 0 && !selectedPeriodId) {
-            setSelectedPeriodId(data[0].id);
+            setSelectedPeriodId(data[0].id)
           }
         }
       } catch {
-        console.error('Failed to fetch periods');
+        console.error('Failed to fetch periods')
       } finally {
-        setLoadingPeriods(false);
+        setLoadingPeriods(false)
       }
     }
-    fetchPeriods();
-  }, [selectedPeriodId, setSelectedPeriodId]);
+    fetchPeriods()
+  }, [isAuthenticated, selectedPeriodId, setSelectedPeriodId])
+
+  // --- Redirect tab if not allowed ---
+  useEffect(() => {
+    if (!user) return
+    const visibleTabs = getVisibleTabs(user.role)
+    if (!visibleTabs.includes(activeTab)) {
+      setActiveTab(visibleTabs[0])
+    }
+  }, [user, activeTab, setActiveTab])
 
   const handleTabChange = useCallback(
     (tab: ActiveTab) => {
-      setActiveTab(tab);
-      setMobileMenuOpen(false);
+      setActiveTab(tab)
+      setMobileMenuOpen(false)
     },
     [setActiveTab]
-  );
+  )
 
-  const currentTab = tabPlaceholders[activeTab];
+  const handleLogout = useCallback(async () => {
+    try {
+      await signOut({ redirect: false })
+    } catch {
+      // ignore
+    }
+    setUser(null)
+    setIsAuthenticated(false)
+    setActiveTab('dashboard')
+  }, [setUser, setIsAuthenticated, setActiveTab])
+
+  // --- Loading auth state ---
+  if (isLoadingAuth) {
+    return (
+      <div dir="rtl" className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="flex flex-col items-center gap-4">
+          <div className="size-12 rounded-2xl bg-emerald-600 flex items-center justify-center animate-pulse">
+            <Target className="size-6 text-white" />
+          </div>
+          <p className="text-slate-400 text-sm">در حال بارگذاری...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // --- Not authenticated: show login overlay ---
+  if (!isAuthenticated || !user) {
+    return <LoginOverlay />
+  }
+
+  // --- Authenticated: show main app ---
+  const visibleTabs = getVisibleTabs(user.role)
+  const navItems = allNavItems.filter(item => item.minRole.includes(user.role))
+  const currentTab = tabPlaceholders[activeTab]
+  const userCanSelectBranch = canSelectBranch(user.role)
+  const roleConfig = getRoleConfig(user.role)
 
   // --- Sidebar Navigation ---
   const SidebarNav = ({ collapsed = false }: { collapsed?: boolean }) => (
@@ -247,32 +337,42 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Left: Selectors */}
+          {/* Left: Selectors + User Menu */}
           <div className="flex items-center gap-3">
-            {/* Branch Selector */}
-            <div className="flex items-center gap-2">
-              <Building2 className="size-4 text-slate-400 hidden sm:block" />
-              <Select
-                dir="rtl"
-                value={selectedBranchId || ''}
-                onValueChange={(val) => setSelectedBranchId(val)}
-              >
-                <SelectTrigger className="w-[180px] sm:w-[200px] bg-slate-800 border-slate-600 text-white text-sm hover:bg-slate-700 focus:ring-emerald-500">
-                  <SelectValue placeholder={loadingBranches ? 'در حال بارگذاری...' : 'انتخاب شعبه'} />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-600 text-white">
-                  {branches.map((branch) => (
-                    <SelectItem
-                      key={branch.id}
-                      value={branch.id}
-                      className="text-white focus:bg-emerald-600 focus:text-white"
-                    >
-                      {branch.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Branch Selector - only for admin/planning */}
+            {userCanSelectBranch && (
+              <div className="flex items-center gap-2">
+                <Building2 className="size-4 text-slate-400 hidden sm:block" />
+                <Select
+                  dir="rtl"
+                  value={selectedBranchId || ''}
+                  onValueChange={(val) => setSelectedBranchId(val)}
+                >
+                  <SelectTrigger className="w-[180px] sm:w-[200px] bg-slate-800 border-slate-600 text-white text-sm hover:bg-slate-700 focus:ring-emerald-500">
+                    <SelectValue placeholder={loadingBranches ? 'در حال بارگذاری...' : 'انتخاب شعبه'} />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-600 text-white">
+                    {branches.map((branch) => (
+                      <SelectItem
+                        key={branch.id}
+                        value={branch.id}
+                        className="text-white focus:bg-emerald-600 focus:text-white"
+                      >
+                        {branch.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Branch badge for branch_manager */}
+            {!userCanSelectBranch && user.branchName && (
+              <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-1.5">
+                <Building2 className="size-4 text-emerald-400" />
+                <span className="text-sm text-emerald-300 font-medium">{user.branchName}</span>
+              </div>
+            )}
 
             {/* Period Selector */}
             <div className="flex items-center gap-2">
@@ -298,6 +398,41 @@ export default function Home() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* User Menu */}
+            <DropdownMenu dir="rtl">
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center gap-2 text-slate-300 hover:text-white hover:bg-slate-800 px-2">
+                  <div className="size-8 rounded-full bg-emerald-600/20 flex items-center justify-center">
+                    <User className="size-4 text-emerald-400" />
+                  </div>
+                  <div className="hidden sm:flex flex-col items-start">
+                    <span className="text-xs font-medium text-white leading-tight">{user.name}</span>
+                    <Badge variant="outline" className={`text-[9px] px-1 py-0 ${roleConfig.className}`}>
+                      {roleConfig.label}
+                    </Badge>
+                  </div>
+                  <ChevronDown className="size-3 text-slate-400 hidden sm:block" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56 bg-slate-800 border-slate-700 text-white">
+                <div className="px-3 py-2 border-b border-slate-700">
+                  <p className="text-sm font-medium">{user.name}</p>
+                  <p className="text-xs text-slate-400 font-mono">{user.email}</p>
+                  <Badge variant="outline" className={`text-[10px] mt-1 ${roleConfig.className}`}>
+                    {roleConfig.label}
+                  </Badge>
+                </div>
+                <DropdownMenuSeparator className="bg-slate-700" />
+                <DropdownMenuItem
+                  className="text-red-400 focus:text-red-300 focus:bg-red-500/10 cursor-pointer"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="size-4 ml-2" />
+                  خروج از حساب
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
@@ -335,11 +470,19 @@ export default function Home() {
             <SidebarNav collapsed={sidebarCollapsed} />
           </ScrollArea>
 
-          {/* Sidebar Footer */}
+          {/* Sidebar Footer - User info */}
           {!sidebarCollapsed && (
             <div className="p-3 border-t border-slate-700">
-              <div className="px-2 text-xs text-slate-500 text-center">
-                نسخه ۱.۰.۰
+              <div className="px-2 flex items-center gap-2">
+                <div className="size-7 rounded-full bg-emerald-600/20 flex items-center justify-center shrink-0">
+                  <User className="size-3.5 text-emerald-400" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-slate-300 truncate">{user.name}</p>
+                  <Badge variant="outline" className={`text-[9px] px-1 py-0 ${roleConfig.className}`}>
+                    {roleConfig.label}
+                  </Badge>
+                </div>
               </div>
             </div>
           )}
@@ -359,6 +502,19 @@ export default function Home() {
             <ScrollArea className="flex-1">
               <SidebarNav collapsed={false} />
             </ScrollArea>
+            <div className="p-3 border-t border-slate-700">
+              <div className="px-2 flex items-center gap-2">
+                <div className="size-7 rounded-full bg-emerald-600/20 flex items-center justify-center shrink-0">
+                  <User className="size-3.5 text-emerald-400" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-slate-300 truncate">{user.name}</p>
+                  <Badge variant="outline" className={`text-[9px] px-1 py-0 ${roleConfig.className}`}>
+                    {roleConfig.label}
+                  </Badge>
+                </div>
+              </div>
+            </div>
           </SheetContent>
         </Sheet>
 
@@ -378,8 +534,8 @@ export default function Home() {
                   );
                 })()}
                 <div>
-                  <h2 className="text-xl font-bold text-slate-800">{currentTab.title}</h2>
-                  <p className="text-sm text-slate-500">{currentTab.description}</p>
+                  <h2 className="text-xl font-bold text-slate-800">{currentTab?.title || 'داشبورد'}</h2>
+                  <p className="text-sm text-slate-500">{currentTab?.description || ''}</p>
                 </div>
               </div>
               <Separator className="mt-4" />
