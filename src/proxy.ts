@@ -12,6 +12,10 @@ const roleAccessMap: Record<string, string[]> = {
 // Routes that require specific roles
 const adminOnlyRoutes = ['/api/admin']
 
+export const config = {
+  matcher: ['/api/:path*'],
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
