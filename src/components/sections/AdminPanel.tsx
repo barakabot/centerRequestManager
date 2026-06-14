@@ -20,39 +20,18 @@ import { Shield, Users, Building2, Package, Target, FileQuestion, Plus, Pencil, 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts'
 // Hooks
 import { useToast } from '@/hooks/use-toast'
+// Jalali date utilities
+import { formatJalaliFull, formatJalaliShort, formatJalaliDateTime, toPersianDigits, JALALI_MONTHS } from '@/lib/jalali'
+import { JalaliDatePicker } from '@/components/ui/jalali-date-picker'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const formatNumber = (num: number): string => num.toLocaleString('fa-IR')
 const formatPercent = (num: number): string => `٪${num.toLocaleString('fa-IR', { maximumFractionDigits: 1 })}`
 
-const formatPersianDate = (dateStr: string | null | undefined): string => {
-  if (!dateStr) return '—'
-  try {
-    return new Date(dateStr).toLocaleDateString('fa-IR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  } catch {
-    return dateStr
-  }
-}
-
-const formatPersianDateShort = (dateStr: string | null | undefined): string => {
-  if (!dateStr) return '—'
-  try {
-    return new Date(dateStr).toLocaleDateString('fa-IR', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-  } catch {
-    return dateStr
-  }
-}
+// Use Jalali (Shamsi) dates
+const formatPersianDate = formatJalaliDateTime
+const formatPersianDateShort = formatJalaliShort
 
 const getRoleConfig = (role: string): { label: string; className: string } => {
   switch (role) {
@@ -1376,16 +1355,16 @@ function PeriodsManagement() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">تاریخ شروع</label>
-                <Input type="date" value={form.startDate} onChange={(e) => setForm(p => ({ ...p, startDate: e.target.value }))} dir="ltr" />
+                <JalaliDatePicker value={form.startDate} onChange={(v) => setForm(p => ({ ...p, startDate: v }))} placeholder="انتخاب تاریخ شروع" />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">تاریخ پایان</label>
-                <Input type="date" value={form.endDate} onChange={(e) => setForm(p => ({ ...p, endDate: e.target.value }))} dir="ltr" />
+                <JalaliDatePicker value={form.endDate} onChange={(v) => setForm(p => ({ ...p, endDate: v }))} placeholder="انتخاب تاریخ پایان" />
               </div>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">مهلت تخصیص</label>
-              <Input type="date" value={form.deadlineDate} onChange={(e) => setForm(p => ({ ...p, deadlineDate: e.target.value }))} dir="ltr" />
+              <JalaliDatePicker value={form.deadlineDate} onChange={(v) => setForm(p => ({ ...p, deadlineDate: v }))} placeholder="انتخاب مهلت تخصیص" />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">وضعیت</label>

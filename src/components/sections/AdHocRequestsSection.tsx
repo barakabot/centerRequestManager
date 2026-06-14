@@ -51,6 +51,7 @@ import {
 } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { useToast } from '@/hooks/use-toast'
+import { formatJalaliFull } from '@/lib/jalali'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -121,10 +122,7 @@ const getTypeLabel = (type: string): string => {
   }
 }
 
-const formatDate = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('fa-IR', { year: 'numeric', month: 'long', day: 'numeric' })
-}
+const formatDate = formatJalaliFull
 
 // ─── Create Request Dialog ──────────────────────────────────────────────────
 

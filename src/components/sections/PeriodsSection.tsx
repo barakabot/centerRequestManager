@@ -27,6 +27,7 @@ import {
   Lock,
   Timer,
 } from 'lucide-react'
+import { formatJalaliFull, formatJalaliShort, toPersianDigits } from '@/lib/jalali'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -44,10 +45,7 @@ interface Period {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const formatDate = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('fa-IR', { year: 'numeric', month: 'long', day: 'numeric' })
-}
+const formatDate = formatJalaliFull
 
 const getDaysRemaining = (deadlineStr: string): number => {
   const now = new Date()
