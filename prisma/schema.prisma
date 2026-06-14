@@ -142,5 +142,27 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  branch Branch? @relation(fields: [branchId], references: [id])
+  branch    Branch?    @relation(fields: [branchId], references: [id])
+  auditLogs AuditLog[]
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String   // create, update, delete, login, approve, reject, bulk_create
+  entity    String   // user, branch, product_group, target, salesman, period, ad_hoc_request, settings
+  entityId  String?
+  details   String?  // JSON string with additional info
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Settings {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+  label String
+  updatedAt DateTime @updatedAt
 }

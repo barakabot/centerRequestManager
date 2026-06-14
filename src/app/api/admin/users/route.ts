@@ -1,5 +1,7 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { hashPassword } from '@/lib/auth';
+import { createAuditLog } from '@/lib/audit';
 
 // GET /api/admin/users
 export async function GET() {
@@ -13,7 +15,7 @@ export async function GET() {
     return NextResponse.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
-    return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
+    return NextResponse.json({ error: 'خطا در دریافت لیست کاربران' }, { status: 500 });
   }
 }
 
@@ -21,7 +23,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, email, role, branchId, isActive } = body;
+    const { name, email, role, branchId, isActive, password } = body;
 
     if (!name || !email || !role) {
       return NextResponse.json({ error: 'نام، ایمیل و نقش الزامی است' }, { status: 400 });
@@ -33,10 +35,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'این ایمیل قبلاً ثبت شده است' }, { status: 400 });
     }
 
+    // Hash password - default to "123456" if not provided
+    const hashedPassword = await hashPassword(password || '123456');
+
     const user = await db.user.create({
       data: {
         name,
         email,
+        password: hashedPassword,
         role,
         branchId: branchId || null,
         isActive: isActive !== undefined ? isActive : true,
@@ -46,10 +52,20 @@ export async function POST(request: Request) {
       },
     });
 
+    // Create audit log
+    const adminUserId = request.headers.get('x-user-id') || '';
+    await createAuditLog({
+      userId: adminUserId,
+      action: 'create',
+      entity: 'user',
+      entityId: user.id,
+      details: JSON.stringify({ name, email, role, branchId }),
+    });
+
     return NextResponse.json(user, { status: 201 });
   } catch (error) {
     console.error('Error creating user:', error);
-    return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
+    return NextResponse.json({ error: 'خطا در ایجاد کاربر' }, { status: 500 });
   }
 }
 
@@ -57,7 +73,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { id, name, email, role, branchId, isActive } = body;
+    const { id, name, email, role, branchId, isActive, password } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'شناسه کاربر الزامی است' }, { status: 400 });
@@ -71,24 +87,42 @@ export async function PUT(request: Request) {
       }
     }
 
+    // Build update data
+    const updateData: Record<string, unknown> = {
+      ...(name ? { name } : {}),
+      ...(email ? { email } : {}),
+      ...(role ? { role } : {}),
+      ...(branchId !== undefined ? { branchId: branchId || null } : {}),
+      ...(isActive !== undefined ? { isActive } : {}),
+    };
+
+    // Hash and update password if provided
+    if (password) {
+      updateData.password = await hashPassword(password);
+    }
+
     const user = await db.user.update({
       where: { id },
-      data: {
-        ...(name ? { name } : {}),
-        ...(email ? { email } : {}),
-        ...(role ? { role } : {}),
-        ...(branchId !== undefined ? { branchId: branchId || null } : {}),
-        ...(isActive !== undefined ? { isActive } : {}),
-      },
+      data: updateData,
       include: {
         branch: { select: { name: true, code: true } },
       },
     });
 
+    // Create audit log
+    const adminUserId = request.headers.get('x-user-id') || '';
+    await createAuditLog({
+      userId: adminUserId,
+      action: 'update',
+      entity: 'user',
+      entityId: id,
+      details: JSON.stringify({ name, email, role, branchId, isActive, passwordChanged: !!password }),
+    });
+
     return NextResponse.json(user);
   } catch (error) {
     console.error('Error updating user:', error);
-    return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });
+    return NextResponse.json({ error: 'خطا در بروزرسانی کاربر' }, { status: 500 });
   }
 }
 
@@ -103,9 +137,19 @@ export async function DELETE(request: Request) {
     }
 
     await db.user.delete({ where: { id } });
+
+    // Create audit log
+    const adminUserId = request.headers.get('x-user-id') || '';
+    await createAuditLog({
+      userId: adminUserId,
+      action: 'delete',
+      entity: 'user',
+      entityId: id,
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting user:', error);
-    return NextResponse.json({ error: 'Failed to delete user' }, { status: 500 });
+    return NextResponse.json({ error: 'خطا در حذف کاربر' }, { status: 500 });
   }
 }
