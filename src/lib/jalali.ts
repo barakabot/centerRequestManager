@@ -17,17 +17,43 @@ export const JALALI_WEEKDAYS_FULL = [
   'شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه',
 ] as const
 
+// ─── Number conversion ──────────────────────────────────────────────────────
+
+/**
+ * Convert English digits to Persian digits
+ */
+export function toPersianDigits(str: string | number): string {
+  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹']
+  return String(str).replace(/\d/g, (d) => persianDigits[parseInt(d)])
+}
+
+/**
+ * Convert Persian/Arabic digits to English digits
+ */
+export function toEnglishDigits(str: string): string {
+  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹']
+  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩']
+  let result = str
+  for (let i = 0; i < 10; i++) {
+    result = result.replace(new RegExp(persianDigits[i], 'g'), String(i))
+    result = result.replace(new RegExp(arabicDigits[i], 'g'), String(i))
+  }
+  return result
+}
+
 // ─── Core conversion functions ──────────────────────────────────────────────
 
 /**
  * Convert a Gregorian date string to Jalali formatted string
- * @param dateStr - ISO date string or any parsable date
- * @param format - jalali-moment format string
+ * Always returns Persian digits
  */
 export function toJalali(dateStr: string | null | undefined, format: string = 'jYYYY/jMM/jDD'): string {
   if (!dateStr) return '—'
   try {
-    return moment(dateStr).locale('fa').format(format)
+    const result = moment(dateStr).locale('fa').format(format)
+    // jalali-moment with fa locale may return Persian digits already,
+    // but we ensure it by converting explicitly
+    return toPersianDigits(result)
   } catch {
     return '—'
   }
@@ -35,16 +61,16 @@ export function toJalali(dateStr: string | null | undefined, format: string = 'j
 
 /**
  * Format a date as Jalali with full Persian month name
- * e.g. "۱۴۰۴ فروردین ۱۵"
+ * e.g. "۱۵ فروردین ۱۴۰۴"
  */
 export function formatJalaliFull(dateStr: string | null | undefined): string {
   if (!dateStr) return '—'
   try {
     const m = moment(dateStr).locale('fa')
-    const day = m.jDate().toLocaleString('fa-IR')
-    const month = JALALI_MONTHS[m.jMonth()]
-    const year = m.jYear().toLocaleString('fa-IR')
-    return `${day} ${month} ${year}`
+    const jDay = m.jDate()
+    const jMonth = m.jMonth() // 0-indexed
+    const jYear = m.jYear()
+    return `${toPersianDigits(jDay)} ${JALALI_MONTHS[jMonth]} ${toPersianDigits(jYear)}`
   } catch {
     return '—'
   }
@@ -55,21 +81,31 @@ export function formatJalaliFull(dateStr: string | null | undefined): string {
  * e.g. "۱۴۰۴/۰۳/۱۵"
  */
 export function formatJalaliShort(dateStr: string | null | undefined): string {
-  return toJalali(dateStr, 'jYYYY/jMM/jDD')
+  if (!dateStr) return '—'
+  try {
+    const m = moment(dateStr).locale('fa')
+    const jYear = m.jYear()
+    const jMonth = m.jMonth() + 1 // 1-indexed
+    const jDay = m.jDate()
+    return toPersianDigits(`${jYear}/${String(jMonth).padStart(2, '0')}/${String(jDay).padStart(2, '0')}`)
+  } catch {
+    return '—'
+  }
 }
 
 /**
  * Format a date as Jalali with time
- * e.g. "۱۴۰۴/۰۳/۱۵ ۱۴:۳۰"
+ * e.g. "۱۴۰۴/۰۳/۱۵ - ۱۴:۳۰"
  */
 export function formatJalaliDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '—'
   try {
-    const m = moment(dateStr).locale('fa')
-    const datePart = m.format('jYYYY/jMM/jDD')
-    const timePart = m.format('HH:mm')
-    // Convert digits to Persian
-    return `${toPersianDigits(datePart)} ${toPersianDigits(timePart)}`
+    const m = moment(dateStr)
+    const datePart = formatJalaliShort(dateStr)
+    const hours = m.hours()
+    const minutes = m.minutes()
+    const timePart = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+    return `${datePart} - ${toPersianDigits(timePart)}`
   } catch {
     return '—'
   }
@@ -112,9 +148,11 @@ export function jalaliToGregorian(jYear: number, jMonth: number, jDay: number): 
 
 /**
  * Convert a Jalali formatted string (1404/03/15) to Gregorian ISO
+ * Handles both Persian and English digits
  */
 export function jalaliStrToGregorian(jalaliStr: string): string {
-  return moment(jalaliStr, 'jYYYY/jMM/jDD').format('YYYY-MM-DD')
+  const englishStr = toEnglishDigits(jalaliStr)
+  return moment(englishStr, 'jYYYY/jMM/jDD').format('YYYY-MM-DD')
 }
 
 // ─── Calendar helper functions ──────────────────────────────────────────────
@@ -213,28 +251,4 @@ export function jalaliMonthDays(jYear: number, jMonth: number): number {
 export function getTodayJalali(): { jYear: number; jMonth: number; jDay: number } {
   const m = moment().locale('fa')
   return { jYear: m.jYear(), jMonth: m.jMonth() + 1, jDay: m.jDate() }
-}
-
-// ─── Number conversion ──────────────────────────────────────────────────────
-
-/**
- * Convert English digits to Persian digits
- */
-export function toPersianDigits(str: string | number): string {
-  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹']
-  return String(str).replace(/\d/g, (d) => persianDigits[parseInt(d)])
-}
-
-/**
- * Convert Persian digits to English digits
- */
-export function toEnglishDigits(str: string): string {
-  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹']
-  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩']
-  let result = str
-  for (let i = 0; i < 10; i++) {
-    result = result.replace(new RegExp(persianDigits[i], 'g'), String(i))
-    result = result.replace(new RegExp(arabicDigits[i], 'g'), String(i))
-  }
-  return result
 }
