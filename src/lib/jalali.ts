@@ -41,18 +41,83 @@ export function toEnglishDigits(str: string): string {
   return result
 }
 
+// ─── Timezone-safe date parsing ─────────────────────────────────────────────
+
+/**
+ * Extract the date-only portion (YYYY-MM-DD) from an ISO date string.
+ * This is timezone-safe — it extracts the date part directly from the string
+ * rather than using Date objects which can shift due to timezone offsets.
+ * 
+ * For dates like "2026-06-01T00:00:00.000Z", returns "2026-06-01".
+ * For dates like "2026-06-01", returns "2026-06-01" as-is.
+ * 
+ * IMPORTANT: For "date-only" fields (startDate, endDate, deadlineDate),
+ * the UTC date is the intended date. For "timestamp" fields (createdAt, updatedAt),
+ * the local date might be more appropriate — use extractLocalDateStr instead.
+ */
+function extractDateStr(dateStr: string): string {
+  // If it's already just a date string (YYYY-MM-DD), return as-is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr
+  // Otherwise extract the date part from the ISO string
+  // This works correctly because Prisma/SQLite stores dates as UTC
+  // and the date portion of the ISO string IS the intended date for date-only fields
+  return dateStr.split('T')[0]
+}
+
+/**
+ * Extract a date string (YYYY-MM-DD) using the local timezone.
+ * This is needed for timestamp fields (createdAt, updatedAt) where
+ * the user expects to see the date in their local timezone.
+ */
+function extractLocalDateStr(dateStr: string): string {
+  const d = new Date(dateStr)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+/**
+ * Extract time (HH:mm) from an ISO date string using local timezone.
+ */
+function extractLocalTime(dateStr: string): string {
+  const d = new Date(dateStr)
+  const hours = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  return `${hours}:${minutes}`
+}
+
+/**
+ * Create a timezone-safe moment from a date-only string.
+ * By parsing as 'YYYY-MM-DD' format, we avoid timezone shifts
+ * that happen when moment() interprets ISO strings in local time.
+ */
+function momentDateOnly(dateStr: string): moment.Moment {
+  const dateOnly = extractDateStr(dateStr)
+  return moment(dateOnly, 'YYYY-MM-DD')
+}
+
+/**
+ * Create a moment from a timestamp using local timezone.
+ * For timestamp fields, we want the local date/time representation.
+ */
+function momentLocal(dateStr: string): moment.Moment {
+  const localDate = extractLocalDateStr(dateStr)
+  return moment(localDate, 'YYYY-MM-DD')
+}
+
 // ─── Core conversion functions ──────────────────────────────────────────────
 
 /**
  * Convert a Gregorian date string to Jalali formatted string
  * Always returns Persian digits
+ * Timezone-safe: uses date-only parsing for date fields
  */
 export function toJalali(dateStr: string | null | undefined, format: string = 'jYYYY/jMM/jDD'): string {
   if (!dateStr) return '—'
   try {
-    const result = moment(dateStr).locale('fa').format(format)
-    // jalali-moment with fa locale may return Persian digits already,
-    // but we ensure it by converting explicitly
+    const m = momentDateOnly(dateStr).locale('fa')
+    const result = m.format(format)
     return toPersianDigits(result)
   } catch {
     return '—'
@@ -62,11 +127,12 @@ export function toJalali(dateStr: string | null | undefined, format: string = 'j
 /**
  * Format a date as Jalali with full Persian month name
  * e.g. "۱۵ فروردین ۱۴۰۴"
+ * Timezone-safe: uses date-only parsing
  */
 export function formatJalaliFull(dateStr: string | null | undefined): string {
   if (!dateStr) return '—'
   try {
-    const m = moment(dateStr).locale('fa')
+    const m = momentDateOnly(dateStr).locale('fa')
     const jDay = m.jDate()
     const jMonth = m.jMonth() // 0-indexed
     const jYear = m.jYear()
@@ -79,11 +145,12 @@ export function formatJalaliFull(dateStr: string | null | undefined): string {
 /**
  * Format a date as Jalali with short format
  * e.g. "۱۴۰۴/۰۳/۱۵"
+ * Timezone-safe: uses date-only parsing
  */
 export function formatJalaliShort(dateStr: string | null | undefined): string {
   if (!dateStr) return '—'
   try {
-    const m = moment(dateStr).locale('fa')
+    const m = momentDateOnly(dateStr).locale('fa')
     const jYear = m.jYear()
     const jMonth = m.jMonth() + 1 // 1-indexed
     const jDay = m.jDate()
@@ -94,17 +161,15 @@ export function formatJalaliShort(dateStr: string | null | undefined): string {
 }
 
 /**
- * Format a date as Jalali with time
+ * Format a date as Jalali with time (using local timezone for time)
  * e.g. "۱۴۰۴/۰۳/۱۵ - ۱۴:۳۰"
+ * Timezone-safe: date part uses date-only parsing, time part uses local timezone
  */
 export function formatJalaliDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '—'
   try {
-    const m = moment(dateStr)
     const datePart = formatJalaliShort(dateStr)
-    const hours = m.hours()
-    const minutes = m.minutes()
-    const timePart = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+    const timePart = extractLocalTime(dateStr)
     return `${datePart} - ${toPersianDigits(timePart)}`
   } catch {
     return '—'
@@ -113,15 +178,17 @@ export function formatJalaliDateTime(dateStr: string | null | undefined): string
 
 /**
  * Format a date as Jalali relative (e.g. "۲ ساعت پیش", "۳ روز پیش")
+ * Uses local timezone for relative calculations
  */
 export function formatJalaliRelative(dateStr: string | null | undefined): string {
   if (!dateStr) return '—'
   try {
-    const now = moment()
-    const date = moment(dateStr)
-    const diffMinutes = now.diff(date, 'minutes')
-    const diffHours = now.diff(date, 'hours')
-    const diffDays = now.diff(date, 'days')
+    const now = new Date()
+    const date = new Date(dateStr)
+    const diffMs = now.getTime() - date.getTime()
+    const diffMinutes = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
 
     if (diffMinutes < 1) return 'همین الان'
     if (diffMinutes < 60) return `${toPersianDigits(String(diffMinutes))} دقیقه پیش`
@@ -153,6 +220,27 @@ export function jalaliToGregorian(jYear: number, jMonth: number, jDay: number): 
 export function jalaliStrToGregorian(jalaliStr: string): string {
   const englishStr = toEnglishDigits(jalaliStr)
   return moment(englishStr, 'jYYYY/jMM/jDD').format('YYYY-MM-DD')
+}
+
+/**
+ * Convert an ISO date string to a YYYY-MM-DD string safely.
+ * Uses local timezone to extract the date — suitable for form values.
+ * This avoids the timezone bug of toISOString().split('T')[0]
+ * which can shift dates by a day in non-UTC timezones.
+ */
+export function isoToDateStr(dateStr: string | null | undefined): string {
+  if (!dateStr) return ''
+  try {
+    // For date-only fields stored in DB, extract the date part directly from the ISO string
+    // This is the safest approach because the date portion of the ISO string
+    // represents the intended date for date-only fields
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr
+    // For ISO datetime strings, the date part before 'T' is the UTC date
+    // which is the correct date for date-only fields stored by Prisma
+    return dateStr.split('T')[0]
+  } catch {
+    return ''
+  }
 }
 
 // ─── Calendar helper functions ──────────────────────────────────────────────

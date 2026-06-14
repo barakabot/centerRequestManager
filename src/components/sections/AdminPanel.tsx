@@ -21,7 +21,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, Respon
 // Hooks
 import { useToast } from '@/hooks/use-toast'
 // Jalali date utilities
-import { formatJalaliFull, formatJalaliShort, formatJalaliDateTime, toPersianDigits, JALALI_MONTHS } from '@/lib/jalali'
+import { formatJalaliFull, formatJalaliShort, formatJalaliDateTime, toPersianDigits, JALALI_MONTHS, isoToDateStr } from '@/lib/jalali'
 import { JalaliDatePicker } from '@/components/ui/jalali-date-picker'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -1316,9 +1316,9 @@ function PeriodsManagement() {
     setEditingPeriod(period)
     setForm({
       name: period.name,
-      startDate: period.startDate ? new Date(period.startDate).toISOString().split('T')[0] : '',
-      endDate: period.endDate ? new Date(period.endDate).toISOString().split('T')[0] : '',
-      deadlineDate: period.deadlineDate ? new Date(period.deadlineDate).toISOString().split('T')[0] : '',
+      startDate: isoToDateStr(period.startDate),
+      endDate: isoToDateStr(period.endDate),
+      deadlineDate: isoToDateStr(period.deadlineDate),
       status: period.status,
     })
     setDialogOpen(true)
