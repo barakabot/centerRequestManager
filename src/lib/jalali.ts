@@ -89,12 +89,17 @@ function extractLocalTime(dateStr: string): string {
 
 /**
  * Create a timezone-safe moment from a date-only string.
- * By parsing as 'YYYY-MM-DD' format, we avoid timezone shifts
- * that happen when moment() interprets ISO strings in local time.
+ * Uses native Date object to avoid moment parsing issues with
+ * format strings that can conflict with jalali-moment's extended tokens.
+ * The 'T00:00:00' suffix ensures the date is interpreted in local timezone
+ * (no 'Z' suffix), so no timezone shift occurs.
  */
 function momentDateOnly(dateStr: string): moment.Moment {
   const dateOnly = extractDateStr(dateStr)
-  return moment(dateOnly, 'YYYY-MM-DD')
+  // Use native Date to avoid jalali-moment format parsing issues
+  // Adding T00:00:00 without Z suffix = local time = no timezone shift
+  const d = new Date(dateOnly + 'T00:00:00')
+  return moment(d)
 }
 
 /**
@@ -289,6 +294,9 @@ export function getJalaliMonthGrid(jYear: number, jMonth: number): JalaliDay[][]
   const daysInMonth = firstDay.jDaysInMonth()
   for (let d = 1; d <= daysInMonth; d++) {
     const day = moment(`${jYear}/${jMonth}/${d}`, 'jYYYY/jM/jD')
+    const gregStr = day.format('YYYY-MM-DD')
+    // Safety check: if format fails, use jalaliToGregorian as fallback
+    const safeGregStr = gregStr && gregStr.startsWith('2') ? gregStr : jalaliToGregorian(jYear, jMonth, d)
     days.push({
       date: day,
       jYear,
@@ -297,7 +305,7 @@ export function getJalaliMonthGrid(jYear: number, jMonth: number): JalaliDay[][]
       isCurrentMonth: true,
       isToday: day.locale('fa').format('jYYYY/jMM/jDD') === todayStr,
       isWeekend: day.locale('fa').weekday() === 6, // Friday
-      gregorianStr: day.format('YYYY-MM-DD'),
+      gregorianStr: safeGregStr,
     })
   }
 
